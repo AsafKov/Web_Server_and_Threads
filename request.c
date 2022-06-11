@@ -191,6 +191,7 @@ int requestHandle(int fd)
          return fd;
       }
       requestServeDynamic(fd, filename, cgiargs);
+      return fd;
    }
 }
 
