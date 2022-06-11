@@ -80,9 +80,6 @@ void init_server_data(ServerData *server_data, int argc, char *argv[]){
     server_data->requests = (Queue *) malloc(sizeof(Queue));
     queue_init(server_data->requests);
 
-    server_data->requests_in_progress = (Queue *) malloc(sizeof(Queue));
-    queue_init(server_data->requests_in_progress);
-
     getargs(&server_data->port, &server_data->number_of_workers, &server_data->max_requests, argc, argv);
 }
 
