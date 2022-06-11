@@ -116,8 +116,8 @@ void thread_master_routine(void *data) {
                     pthread_cond_wait(&server_data->queue_space_available, &server_data->lock_request_handle);
                 }
             }
-            pthread_mutex_unlock(&server_data->lock_request_handle);
         }
+        pthread_mutex_unlock(&server_data->lock_request_handle);
 
 
         // push new request to queue, lock access to queue while it is done
