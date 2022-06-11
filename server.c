@@ -3,26 +3,7 @@
 #include <pthread.h>
 #include "queue.h"
 
-// 
-// server.c: A very, very simple web server
-//
-// To run:
-//  ./server <portnum (above 2000)>
-//
-// Repeatedly handles HTTP requests sent to this port number.
-// Most of the work is done within routines written in request.c
-//
-
-// HW3: Parse the new arguments too
-void getargs(int *port, int *number_of_workers, int *max_requests, int argc, char *argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-        exit(1);
-    }
-    *number_of_workers = atoi(argv[0]);
-    *port = atoi(argv[1]);
-    *max_requests = atoi(argv[2]);
-}
+enum OverloadPolicy {block, drop_tail, drop_random};
 
 typedef struct ServerData {
     int port;
@@ -30,6 +11,7 @@ typedef struct ServerData {
     int max_requests;
     int number_of_workers;
     int requests_in_progress;
+    enum OverloadPolicy overload_policy;
     pthread_mutex_t lock_request_handle;
     pthread_cond_t queue_space_available;
     pthread_cond_t is_work_available;
@@ -37,6 +19,26 @@ typedef struct ServerData {
     Queue *workers_queue;
     Queue *requests;
 } ServerData;
+
+void getargs(ServerData *server_data, int argc, char *argv[]) {
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+        exit(1);
+    }
+    server_data->number_of_workers = atoi(argv[0]);
+    server_data->port = atoi(argv[1]);
+    server_data->max_requests = atoi(argv[2]);
+
+    if(strcmp(argv[3], "block") == 0){
+        server_data->overload_policy = block;
+    }
+    if(strcmp(argv[3], "dt") == 0){
+        server_data->overload_policy = drop_tail;
+    }
+    if(strcmp(argv[3], "random") == 0){
+        server_data->overload_policy = drop_random;
+    }
+}
 
 void init_server_data(ServerData *data, int argc, char *argv[]);
 
@@ -80,7 +82,7 @@ void init_server_data(ServerData *server_data, int argc, char *argv[]){
     server_data->requests = (Queue *) malloc(sizeof(Queue));
     queue_init(server_data->requests);
 
-    getargs(&server_data->port, &server_data->number_of_workers, &server_data->max_requests, argc, argv);
+    getargs(server_data, argc, argv);
 }
 
 void thread_master_routine(void *data) {
@@ -99,10 +101,24 @@ void thread_master_routine(void *data) {
 
         // If the requests in the system are currently at maximum capacity, stop receiving new requests
         pthread_mutex_lock(&server_data->lock_request_handle);
-        while(queue_size(server_data->requests) + server_data->requests_in_progress == server_data->max_requests){
-            pthread_cond_wait(&server_data->queue_space_available, &server_data->lock_request_handle);
+        if(queue_size(server_data->requests) + server_data->requests_in_progress == server_data->max_requests){
+            if(server_data->overload_policy == drop_tail){
+                Close(*current_fd);
+                pthread_mutex_unlock(&server_data->lock_request_handle);
+                continue;
+            }
+            if(server_data->overload_policy == drop_random){
+                queue_drop_random(server_data->requests);
+            }
+
+            if(server_data->overload_policy == block){
+                while(queue_size(server_data->requests) + server_data->requests_in_progress == server_data->max_requests){
+                    pthread_cond_wait(&server_data->queue_space_available, &server_data->lock_request_handle);
+                }
+            }
+            pthread_mutex_unlock(&server_data->lock_request_handle);
         }
-        pthread_mutex_unlock(&server_data->lock_request_handle);
+
 
         // push new request to queue, lock access to queue while it is done
         pthread_mutex_lock(&server_data->lock_request_handle);
@@ -136,6 +152,7 @@ void thread_worker_routine(void *data) {
         pthread_mutex_lock(&server_data->lock_request_handle);
         server_data->busy_workers--;
         server_data->requests_in_progress--;
+        pthread_cond_signal(&server_data->queue_space_available);
         pthread_mutex_unlock(&server_data->lock_request_handle);
     }
 }
