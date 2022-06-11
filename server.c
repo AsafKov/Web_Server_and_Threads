@@ -21,21 +21,21 @@ typedef struct ServerData {
 } ServerData;
 
 void getargs(ServerData *server_data, int argc, char *argv[]) {
-    if (argc < 4) {
+    if (argc < 5) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
         exit(1);
     }
-    server_data->number_of_workers = atoi(argv[0]);
     server_data->port = atoi(argv[1]);
-    server_data->max_requests = atoi(argv[2]);
+    server_data->number_of_workers = atoi(argv[2]);
+    server_data->max_requests = atoi(argv[3]);
 
-    if(strcmp(argv[3], "block") == 0){
+    if(strcmp(argv[4], "block") == 0){
         server_data->overload_policy = block;
     }
-    if(strcmp(argv[3], "dt") == 0){
+    if(strcmp(argv[4], "dt") == 0){
         server_data->overload_policy = drop_tail;
     }
-    if(strcmp(argv[3], "random") == 0){
+    if(strcmp(argv[4], "random") == 0){
         server_data->overload_policy = drop_random;
     }
 }
