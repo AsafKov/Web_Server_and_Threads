@@ -3,4 +3,4 @@ project(threads)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(threads output.c queue.h request.c segel.c server.c)
+add_executable(threads output.c queue.h request.c segel.c server.c WorkerThread.h ServerRequest.h)

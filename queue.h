@@ -111,7 +111,7 @@ void queue_drop_random(Queue *q) {
     srand(time(0));
 
     for (int i = 0; i < drop; i++) {
-        index_to_remove = rand() % size;
+        index_to_remove = rand() % (size - 1);
         queue_remove_index(q, index_to_remove);
         size--;
     }
