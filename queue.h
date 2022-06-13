@@ -111,7 +111,11 @@ void queue_remove_index(Queue *q, int index) {
 
 void queue_drop_random(Queue *q) {
     int size = queue_size(q);
-    int drop = ceil(size * 0.3);
+    double drop_calc = size * 0.3;
+    int drop = (int) drop_calc;
+    if(drop_calc > drop){
+        drop++;
+    }
     if(drop == 0) return;
     int index_to_remove;
     srand(time(0));

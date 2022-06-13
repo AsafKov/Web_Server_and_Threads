@@ -2,7 +2,6 @@
 #include <sys/time.h>
 #include "queue.h"
 #include "WorkerThread.h"
-#include <unistd.h>
 #include "ServerRequest.h"
 
 typedef struct ServerData {
@@ -167,9 +166,11 @@ void thread_worker_routine(void *data) {
         if(gettimeofday(&dispatch_time, NULL) == -1){
             //TODO: handle error
         }
+
         timersub(&dispatch_time, &curr_request->arrival_interval, &curr_request->dispatch_interval);
         WorkerThread *handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         queue_pop(server_data->requests, 0);
+        handling_thread->requests_counter++;
         server_data->busy_workers++;
         server_data->requests_in_progress++;
         pthread_mutex_unlock(&server_data->lock_request_handle);
