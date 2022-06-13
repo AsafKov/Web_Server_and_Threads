@@ -1,3 +1,6 @@
+#include "segel.h"
+#include "request.h"
+
 typedef struct _QueueNode {
     void *data;
     struct _QueueNode *link;
@@ -87,11 +90,12 @@ typedef struct _Queue {
 void queue_remove_index(Queue *q, int index) {
     QueueNode *prev = NULL, *current = q->head;
     if(index == 0){
+        Close(((ServerRequest *)(current->data))->fd);
         queue_pop(q, 1);
         return;
     }
     int current_index = 0;
-    while(current_index != index && current != NULL && current->link == NULL){
+    while(current_index != index && current != NULL && current->link != NULL){
         prev = current;
         current = current->link;
         current_index++;
@@ -99,19 +103,21 @@ void queue_remove_index(Queue *q, int index) {
 
     prev->link = current->link;
     current->link = NULL;
+    Close(((ServerRequest *)(current->data))->fd);
+    free(current->data);
     free(current);
 }
 
 
 void queue_drop_random(Queue *q) {
     int size = queue_size(q);
-    int drop = (int) (size * 0.3);
+    int drop = ceil(size * 0.3);
     if(drop == 0) return;
     int index_to_remove;
     srand(time(0));
 
     for (int i = 0; i < drop; i++) {
-        index_to_remove = rand() % (size - 1);
+        index_to_remove = rand() % size;
         queue_remove_index(q, index_to_remove);
         size--;
     }

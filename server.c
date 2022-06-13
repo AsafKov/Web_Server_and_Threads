@@ -1,5 +1,3 @@
-#include "segel.h"
-#include "request.h"
 #include <pthread.h>
 #include <sys/time.h>
 #include "queue.h"
@@ -140,9 +138,6 @@ void thread_master_routine(void *data) {
         // push new request to queue, lock access to queue while it is done
         pthread_mutex_lock(&server_data->lock_request_handle);
         queue_push(server_data->requests, request);
-        while(server_data->busy_workers == server_data->number_of_workers){
-            pthread_cond_wait(&server_data->is_worker_available, &server_data->lock_request_handle);
-        }
         pthread_cond_signal(&server_data->is_work_available);
         pthread_mutex_unlock(&server_data->lock_request_handle);
     }
