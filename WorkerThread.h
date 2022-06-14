@@ -6,7 +6,7 @@
 #define THREADS_WORKERTHREAD_H
 #include <pthread.h>
 
-enum OverloadPolicy {block, drop_tail, drop_random};
+enum OverloadPolicy {block, drop_tail, drop_random, drop_head};
 
 typedef struct WorkerThread {
     pthread_t *thread;

@@ -24,7 +24,7 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, worker->given_id);
     sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, worker->requests_counter);
     sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, worker->static_requests_counter);
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, worker->dynamic_requests_counter);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, worker->dynamic_requests_counter);
     Rio_writen(fd, buf, strlen(buf));
     printf("%s", buf);
 
@@ -39,7 +39,6 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
     // Write out the content
     Rio_writen(fd, body, strlen(body));
     printf("%s", body);
-
 }
 
 
@@ -117,7 +116,7 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, ServerRequest *r
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, worker->given_id);
     sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, worker->requests_counter);
     sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, worker->static_requests_counter);
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, worker->dynamic_requests_counter);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, worker->dynamic_requests_counter);
 
 
     Rio_writen(fd, buf, strlen(buf));
@@ -150,14 +149,14 @@ void requestServeStatic(int fd, char *filename, int filesize, ServerRequest *req
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
     sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
     sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
-    sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
+    sprintf(buf, "%sContent-Type: %s\r\n", buf, filetype);
     // add stats to response
     sprintf(buf, "%sStat-Req-Arrival:: %lu.%06lu\r\n", buf, request->arrival_interval.tv_sec, request->arrival_interval.tv_usec);
     sprintf(buf, "%sStat-Req-Dispatch:: %lu.%06lu\r\n", buf, request->dispatch_interval.tv_sec, request->dispatch_interval.tv_usec);
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, worker->given_id);
     sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, worker->requests_counter);
     sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, worker->static_requests_counter);
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, worker->dynamic_requests_counter);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, worker->dynamic_requests_counter);
 
     Rio_writen(fd, buf, strlen(buf));
 
@@ -169,6 +168,7 @@ void requestServeStatic(int fd, char *filename, int filesize, ServerRequest *req
 
 // handle a request
 int requestHandle(ServerRequest *request, WorkerThread *worker) {
+    worker->requests_counter++;
     int fd = request->fd;
     int is_static;
     struct stat sbuf;

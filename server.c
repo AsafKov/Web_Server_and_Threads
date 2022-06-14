@@ -38,6 +38,9 @@ void getargs(ServerData *server_data, int argc, char *argv[]) {
     if(strcmp(argv[4], "random") == 0){
         server_data->overload_policy = drop_random;
     }
+    if(strcmp(argv[4], "dh") == 0){
+        server_data->overload_policy = drop_head;
+    }
 }
 
 void init_server_data(ServerData *data, int argc, char *argv[]);
@@ -103,28 +106,22 @@ void thread_master_routine(void *data) {
         // Actively listen on port for server requests
         client_len = sizeof(client_addr);
         conn_fd = Accept(listenfd, (SA *)&client_addr, (socklen_t *) &client_len);
-        current_fd = (int *) malloc(sizeof(int));
-        *current_fd = conn_fd;
 
-
-        ServerRequest *request = (ServerRequest *) malloc(sizeof (ServerRequest));
-        if(gettimeofday(&request->arrival_interval, NULL) == -1){
-            //TODO: handle error
-        }
-        request->fd = *current_fd;
-
-
-        // If the requests in the system are currently at maximum capacity, stop receiving new requests
         pthread_mutex_lock(&server_data->lock_request_handle);
+        // If the requests in the system are currently at maximum capacity, stop receiving new requests
         if(queue_size(server_data->requests) + server_data->requests_in_progress >= server_data->max_requests){
             if(server_data->overload_policy == drop_tail){
-                Close(request->fd);
-                free(request);
+                Close(conn_fd);
                 pthread_mutex_unlock(&server_data->lock_request_handle);
                 continue;
             }
             if(server_data->overload_policy == drop_random){
                 queue_drop_random(server_data->requests);
+            }
+
+            if(server_data->overload_policy == drop_head){
+                Close(((ServerRequest *)queue_front(server_data->requests))->fd);
+                queue_pop(server_data->requests, 1);
             }
             if(server_data->overload_policy == block){
                 while(queue_size(server_data->requests) + server_data->requests_in_progress == server_data->max_requests){
@@ -134,6 +131,14 @@ void thread_master_routine(void *data) {
         }
         pthread_mutex_unlock(&server_data->lock_request_handle);
 
+        current_fd = (int *) malloc(sizeof(int));
+        *current_fd = conn_fd;
+
+        ServerRequest *request = (ServerRequest *) malloc(sizeof (ServerRequest));
+        if(gettimeofday(&request->arrival_interval, NULL) == -1){
+            //TODO: handle error
+        }
+        request->fd = *current_fd;
         // push new request to queue, lock access to queue while it is done
         pthread_mutex_lock(&server_data->lock_request_handle);
         queue_push(server_data->requests, request);
@@ -160,22 +165,20 @@ void thread_worker_routine(void *data) {
         while(queue_size(server_data->requests) == 0){
             pthread_cond_wait(&server_data->is_work_available, &server_data->lock_request_handle);
         }
-
         curr_request = queue_front(server_data->requests);
-        struct timeval dispatch_time;
-        if(gettimeofday(&dispatch_time, NULL) == -1){
-            //TODO: handle error
-        }
-
-        timersub(&dispatch_time, &curr_request->arrival_interval, &curr_request->dispatch_interval);
-        WorkerThread *handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         queue_pop(server_data->requests, 0);
-        handling_thread->requests_counter++;
+        WorkerThread *handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         server_data->busy_workers++;
         server_data->requests_in_progress++;
         pthread_mutex_unlock(&server_data->lock_request_handle);
 
+        struct timeval dispatch_time;
+        if(gettimeofday(&dispatch_time, NULL) == -1){
+            //TODO: handle error
+        }
+        timersub(&dispatch_time, &curr_request->arrival_interval, &curr_request->dispatch_interval);
         Close(requestHandle(curr_request, handling_thread));
+
         pthread_mutex_lock(&server_data->lock_request_handle);
         server_data->busy_workers--;
         server_data->requests_in_progress--;
