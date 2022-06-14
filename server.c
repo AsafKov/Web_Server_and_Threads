@@ -100,11 +100,10 @@ void thread_master_routine(void *data) {
     int conn_fd, client_len;
     struct sockaddr_in client_addr;
     int listenfd = Open_listenfd(server_data->port);
-    int *current_fd;
+    client_len = sizeof(client_addr);
 
     while (1) {
         // Actively listen on port for server requests
-        client_len = sizeof(client_addr);
         conn_fd = Accept(listenfd, (SA *)&client_addr, (socklen_t *) &client_len);
 
         pthread_mutex_lock(&server_data->lock_request_handle);
@@ -115,6 +114,7 @@ void thread_master_routine(void *data) {
                 pthread_mutex_unlock(&server_data->lock_request_handle);
                 continue;
             }
+
             if(server_data->overload_policy == drop_random){
                 queue_drop_random(server_data->requests);
             }
@@ -124,23 +124,18 @@ void thread_master_routine(void *data) {
                 queue_pop(server_data->requests, 1);
             }
             if(server_data->overload_policy == block){
-                while(queue_size(server_data->requests) + server_data->requests_in_progress == server_data->max_requests){
+                while(queue_size(server_data->requests) + server_data->requests_in_progress >= server_data->max_requests){
                     pthread_cond_wait(&server_data->queue_space_available, &server_data->lock_request_handle);
                 }
             }
         }
-        pthread_mutex_unlock(&server_data->lock_request_handle);
-
-        current_fd = (int *) malloc(sizeof(int));
-        *current_fd = conn_fd;
 
         ServerRequest *request = (ServerRequest *) malloc(sizeof (ServerRequest));
         if(gettimeofday(&request->arrival_interval, NULL) == -1){
             //TODO: handle error
         }
-        request->fd = *current_fd;
+        request->fd = conn_fd;
         // push new request to queue, lock access to queue while it is done
-        pthread_mutex_lock(&server_data->lock_request_handle);
         queue_push(server_data->requests, request);
         pthread_cond_signal(&server_data->is_work_available);
         pthread_mutex_unlock(&server_data->lock_request_handle);
@@ -167,11 +162,11 @@ void thread_worker_routine(void *data) {
         }
         curr_request = queue_front(server_data->requests);
         queue_pop(server_data->requests, 0);
-        WorkerThread *handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         server_data->busy_workers++;
         server_data->requests_in_progress++;
         pthread_mutex_unlock(&server_data->lock_request_handle);
 
+        WorkerThread *handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         struct timeval dispatch_time;
         if(gettimeofday(&dispatch_time, NULL) == -1){
             //TODO: handle error
