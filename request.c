@@ -168,7 +168,6 @@ void requestServeStatic(int fd, char *filename, int filesize, ServerRequest *req
 
 // handle a request
 int requestHandle(ServerRequest *request, WorkerThread *worker) {
-    worker->requests_counter++;
     int fd = request->fd;
     int is_static;
     struct stat sbuf;
