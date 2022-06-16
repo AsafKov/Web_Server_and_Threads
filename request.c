@@ -24,7 +24,7 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, worker->given_id);
     sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, worker->requests_counter);
     sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, worker->static_requests_counter);
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, worker->dynamic_requests_counter);
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, worker->dynamic_requests_counter);
     Rio_writen(fd, buf, strlen(buf));
     printf("%s", buf);
 
@@ -116,19 +116,20 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, ServerRequest *r
     sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, worker->given_id);
     sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, worker->requests_counter);
     sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, worker->static_requests_counter);
-    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, worker->dynamic_requests_counter);
-
+    sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, worker->dynamic_requests_counter);
 
     Rio_writen(fd, buf, strlen(buf));
 
-    if (Fork() == 0) {
+    int pid = Fork();
+    if (pid == 0) {
         /* Child process */
         Setenv("QUERY_STRING", cgiargs, 1);
         /* When the CGI process writes to stdout, it will instead go to the socket */
         Dup2(fd, STDOUT_FILENO);
         Execve(filename, emptylist, environ);
+    } else {
+        WaitPid(pid, NULL, 0);
     }
-    Wait(NULL);
 }
 
 

@@ -58,8 +58,10 @@ int queue_size(Queue *q) {
 
 void queue_remove_index(Queue *q, int index) {
     QueueNode *prev = NULL, *current = q->head;
+    ServerRequest *request;
     if(index == 0){
-        Close(((ServerRequest *)(current->data))->fd);
+        request = (ServerRequest *) queue_front(q);
+        Close(request->fd);
         queue_pop(q, 1);
         return;
     }
@@ -70,24 +72,36 @@ void queue_remove_index(Queue *q, int index) {
         current_index++;
     }
 
-    prev->link = current->link;
+    if(current->link != NULL){
+        prev->link = current->link;
+    }
     if(current == q->tail){
         q->tail = prev;
     }
     q->size--;
     current->link = NULL;
-    Close(((ServerRequest *)(current->data))->fd);
+    request = (ServerRequest *) current->data;
+    Close(request->fd);
     free(current->data);
     free(current);
 }
 
 
 void queue_drop_random(Queue *q) {
+    ServerRequest *request;
+    if(q->size == 0) return;
+    if(q->size == 1){
+        request = (ServerRequest *) queue_front(q);
+        Close(request->fd);
+        queue_pop(q, 1);
+        return;
+    }
     srand(time(0));
-    int drop_amount = ceil(q->size*0.3), rand_index;
+    double temp = (double) q->size * 0.3;
+    int drop_amount = ceil(temp), rand_index;
 
     for (int i = 0; i < drop_amount; i++) {
-        rand_index = rand() % q->size;
+        rand_index = abs(rand() % q->size);
         queue_remove_index(q, rand_index);
     }
 }

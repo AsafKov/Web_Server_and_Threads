@@ -48,18 +48,13 @@ void thread_master_routine(void *data);
 
 void thread_worker_routine(void *data);
 
-int main(int argc, char *argv[]) {
-    pthread_t master;
+void signal_work_is_available(ServerData *data);
 
+int main(int argc, char *argv[]) {
     ServerData *server_data = (ServerData *) malloc(sizeof(ServerData));
     init_server_data(server_data, argc, argv);
 
-    // Create master thread
-    if (pthread_create(&master, NULL, (void *(*)(void *)) thread_master_routine, server_data) != 0) {
-        //TODO something
-    }
-
-    while(1);
+    thread_master_routine(server_data);
 }
 
 /** Initialize data shared between master and workers **/
@@ -90,7 +85,7 @@ void init_workers(ServerData *server_data){
         temp_worker->thread = (pthread_t *) malloc(sizeof (pthread_t));
         queue_push(server_data->workers_queue, temp_worker);
         if (pthread_create(temp_worker->thread, NULL, (void *(*)(void *)) thread_worker_routine, server_data) != 0) {
-            //TODO something
+            //TODO handle error
         }
     }
 }
@@ -99,52 +94,72 @@ void thread_master_routine(void *data) {
     ServerData *server_data = (ServerData *) data;
     int conn_fd, client_len;
     struct sockaddr_in client_addr;
+    init_workers(server_data);
+
     int listenfd = Open_listenfd(server_data->port);
     ServerRequest *request;
-
-    init_workers(server_data);
+    struct timeval arrival_time;
 
     while (1) {
         client_len = sizeof(client_addr);
         // Actively listen on port for server requests
         conn_fd = Accept(listenfd, (SA *)&client_addr, (socklen_t *) &client_len);
-
+        if(gettimeofday(&arrival_time, NULL) == -1){
+            //TODO: handle error
+        }
         pthread_mutex_lock(&server_data->lock_request_handling);
         // If the requests in the system are currently at maximum capacity, stop receiving new requests
+        printf("%d", queue_size(server_data->requests) + server_data->requests_in_progress);
         if(queue_size(server_data->requests) + server_data->requests_in_progress >= server_data->max_requests){
             if(server_data->overload_policy == drop_tail){
+                signal_work_is_available(server_data);
                 Close(conn_fd);
-                if(queue_size(server_data->requests) > 0){
-                    pthread_cond_signal(&server_data->is_work_available);
-                }
                 pthread_mutex_unlock(&server_data->lock_request_handling);
                 continue;
             }
 
             if(server_data->overload_policy == drop_random){
-                queue_drop_random(server_data->requests);
+                if(queue_size(server_data->requests) != 0){
+                    queue_drop_random(server_data->requests);
+                    signal_work_is_available(server_data);
+                } else {
+                    Close(conn_fd);
+                    pthread_mutex_unlock(&server_data->lock_request_handling);
+                    continue;
+                }
             }
 
             if(server_data->overload_policy == drop_head){
-                Close(((ServerRequest *)queue_front(server_data->requests))->fd);
-                queue_pop(server_data->requests, 1);
+                if(queue_size(server_data->requests) != 0){
+                    Close(((ServerRequest *)queue_front(server_data->requests))->fd);
+                    queue_pop(server_data->requests, 1);
+                } else {
+                    Close(conn_fd);
+                    pthread_mutex_unlock(&server_data->lock_request_handling);
+                    continue;
+                }
             }
             if(server_data->overload_policy == block){
                 while(queue_size(server_data->requests) + server_data->requests_in_progress >= server_data->max_requests){
+                    signal_work_is_available(server_data);
                     pthread_cond_wait(&server_data->queue_space_available, &server_data->lock_request_handling);
                 }
             }
         }
 
         request = (ServerRequest *) malloc(sizeof (ServerRequest));
-        if(gettimeofday(&request->arrival_interval, NULL) == -1){
-            //TODO: handle error
-        }
+        request->arrival_interval = arrival_time;
         request->fd = conn_fd;
         // push new request to queue, lock access to queue while it is done
         queue_push(server_data->requests, request);
         pthread_cond_signal(&server_data->is_work_available);
         pthread_mutex_unlock(&server_data->lock_request_handling);
+    }
+}
+
+void signal_work_is_available(ServerData *server_data){
+    if(queue_size(server_data->requests)){
+        pthread_cond_signal(&server_data->is_work_available);
     }
 }
 
@@ -173,7 +188,6 @@ void thread_worker_routine(void *data) {
         handling_thread = find_thread_by_id(server_data->workers_queue, pthread_self());
         handling_thread->requests_counter++;
         pthread_mutex_unlock(&server_data->lock_request_handling);
-
 
         struct timeval dispatch_time;
         if(gettimeofday(&dispatch_time, NULL) == -1){
